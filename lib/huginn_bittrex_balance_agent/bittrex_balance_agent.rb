@@ -41,6 +41,7 @@ module Agents
     form_configurable :apikey, type: :string
     form_configurable :secret_key, type: :string
     form_configurable :changes_only, type: :boolean
+
     def validate_options
       unless options['apikey'].present?
         errors.add(:base, "apikey is a required field")
@@ -60,15 +61,7 @@ module Agents
     end
 
     def working?
-      memory['last_status'].to_i > 0
-
-      return false if recent_error_logs?
-      
-      if interpolated['expected_receive_period_in_days'].present?
-        return false unless last_receive_at && last_receive_at > interpolated['expected_receive_period_in_days'].to_i.days.ago
-      end
-
-      true
+      event_created_within?(options['expected_receive_period_in_days']) && !recent_error_logs?
     end
 
     def check
