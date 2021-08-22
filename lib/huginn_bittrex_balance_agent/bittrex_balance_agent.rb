@@ -19,13 +19,14 @@ module Agents
 
     event_description <<-MD
       Events look like this:
-        {
-          "Currency": "BTC",
-          "Balance": 100000.00079137,
-          "Available": 100000.00079137,
-          "Pending": 0.0,
-          "CryptoAddress": "XXXXXXXXXXXXXXXXXXXXXXXXX"
-        }
+
+          {
+            "Currency": "BTC",
+            "Balance": 100000.00079137,
+            "Available": 100000.00079137,
+            "Pending": 0.0,
+            "CryptoAddress": "XXXXXXXXXXXXXXXXXXXXXXXXX"
+          }
     MD
 
     def default_options
