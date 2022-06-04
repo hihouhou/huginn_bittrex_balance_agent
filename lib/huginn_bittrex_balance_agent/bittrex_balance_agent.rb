@@ -140,13 +140,15 @@ module Agents
             payload.each do |currency|
               found = false
               last_status.each do |currencybis|
-                log "currencybis #{currencybis}"
+                if interpolated['debug'] == 'true'
+                  log "currencybis #{currencybis}"
+                end
                 if currency == currencybis
                     found = true
                 end
               end
               if found == false
-                  create_event payload: currency
+                create_event payload: currency
               end
             end
           end
