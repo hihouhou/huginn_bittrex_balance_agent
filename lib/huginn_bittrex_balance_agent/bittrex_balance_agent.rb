@@ -31,6 +31,7 @@ module Agents
 
     def default_options
       {
+        'debug' => 'false',
         'apikey' => '',
         'secret_key' => '',
         'expected_receive_period_in_days' => '2',
@@ -42,7 +43,7 @@ module Agents
     form_configurable :apikey, type: :string
     form_configurable :secret_key, type: :string
     form_configurable :changes_only, type: :boolean
-
+    form_configurable :debug, type: :boolean
     def validate_options
       unless options['apikey'].present?
         errors.add(:base, "apikey is a required field")
@@ -54,6 +55,10 @@ module Agents
 
       if options.has_key?('changes_only') && boolify(options['changes_only']).nil?
         errors.add(:base, "if provided, changes_only must be true or false")
+      end
+
+      if options.has_key?('debug') && boolify(options['debug']).nil?
+        errors.add(:base, "if provided, debug must be true or false")
       end
 
       unless options['expected_receive_period_in_days'].present? && options['expected_receive_period_in_days'].to_i > 0
@@ -75,45 +80,64 @@ module Agents
     # current Unix Time.
     #
     def generate_nonce
-# doesn't work....
-#      (Time.now.to_f * 1_000_000).to_i
-      `date +%s`.to_i
+      (Time.now.to_f * 1000).to_i
     end
 
     def signature(url)
       ::OpenSSL::HMAC.hexdigest 'sha512', interpolated['secret_key'], url
     end
 
+    def digest(body = nil)
+      string =
+        if body.is_a?(Hash)
+          body.to_json
+        elsif body.nil?
+          ''
+        end
+
+      Digest::SHA512.hexdigest(string)
+    end
+
     def fetch
       nonce = generate_nonce
-      url = "https://bittrex.com/api/v1.1/account/getbalances?apikey=" + "#{interpolated['apikey']}" + "&nonce=" + "#{nonce}"
+      content_hash = digest
+      url = "https://api.bittrex.com/v3/balances"
+      presign = nonce.to_s + url + 'GET' + content_hash
       uri = URI.parse(url)
       request = Net::HTTP::Get.new(uri)
-      request["Apisign"] = signature(url)
+      request["Api-Key"] = interpolated['apikey']
+      request["Api-Timestamp"] = nonce.to_s
+      request["Api-Content-Hash"] = content_hash
+      request["Api-Signature"] = signature(presign)
       
       req_options = {
         use_ssl: uri.scheme == "https",
       }
-  
+
       response = Net::HTTP.start(uri.hostname, uri.port, req_options) do |http|
         http.request(request)
       end
 
-      log "request  status : #{response.code}"
+      if interpolated['debug'] == 'true'
+        log "response.body"
+        log response.body
+      end
+
+      log "request status : #{response.code}"
 
       payload = JSON.parse(response.body)
 
       if interpolated['changes_only'] == 'true'
-        if payload['result'].to_s != memory['last_status']
+        if payload.to_s != memory['last_status']
           if "#{memory['last_status']}" == ''
-            payload['result'].each do |currency|
+            payload.each do |currency|
               create_event payload: currency
             end
           else
           log "not equal"
             last_status = memory['last_status'].gsub("=>", ": ").gsub(": nil", ": null")
             last_status = JSON.parse(last_status)
-            payload['result'].each do |currency|
+            payload.each do |currency|
               found = false
               last_status.each do |currencybis|
                 log "currencybis #{currencybis}"
@@ -126,11 +150,11 @@ module Agents
               end
             end
           end
-          memory['last_status'] = payload['result'].to_s
+          memory['last_status'] = payload.to_s
         end
       else
-        create_event payload: payload['result']
-        if payload['result'].to_s != memory['last_status']
+        create_event payload: payload
+        if payload.to_s != memory['last_status']
           memory['last_status'] = payload.to_s
         end
       end
